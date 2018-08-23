@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
@@ -18,11 +17,25 @@ public class MainActivity extends Activity {
     private ReentrantLock mLock;
     private StringBuffer sb = new StringBuffer();
     private TextView tv_container ;
+    private WaitThread waitThread;
 
     private Handler handler = new Handler(){
         @Override
         public void handleMessage(Message msg) {
-            print(msg.obj.toString());
+            switch (msg.what){
+                case 0:
+                    if(waitThread!=null&&waitThread.isAlive()){
+                        try {
+                            TAG.notifyAll();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    break;
+                case 1:
+                    print(msg.obj.toString());
+                    break;
+            }
         }
     };
 
@@ -71,6 +84,7 @@ public class MainActivity extends Activity {
     private void printMessage(String message){
         Message msg = Message.obtain();
         msg.obj = message;
+        msg.what = 1;
         handler.sendMessage(msg);
     }
 
@@ -93,6 +107,20 @@ public class MainActivity extends Activity {
 
     public void onJoin3(View view){
         joinTest3();
+    }
+    public void onWaitSleep(View view){
+        waitSleepTest();
+    }
+
+    private void waitSleepTest() {
+        isRunning=true;
+        count = 100;
+        sb.delete(0,sb.length());
+
+        SleepThread sleepThread = new SleepThread("睡眠线程");
+        waitThread = new WaitThread("等待线程");
+        waitThread.start();
+        sleepThread.start();
     }
 
     private void joinTest3() {
@@ -148,6 +176,69 @@ public class MainActivity extends Activity {
             e.printStackTrace();
         }
         printMessage("SyncThread执行完毕,继续执行main线程\n");
+    }
+
+
+    private class SleepThread extends Thread {
+        boolean isFirst = true;
+
+        SleepThread(String name) {
+            super(name);
+        }
+
+        @Override
+        public void run() {
+            synchronized (TAG){
+                while (isRunning) {
+                    if(isFirst&&count<50){
+                        isFirst = false;
+                        try {
+                            printMessage("SleepThread开始睡眠,睡眠不会释放对象锁\n");
+                            sleep(50);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        printMessage("SleepThread睡眠结束\n");
+                    }
+                    count();
+                    if(count<20){
+                        break;
+                    }
+                }
+                try {
+                    TAG.notifyAll();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private class WaitThread extends Thread {
+        boolean isFirst = true;
+
+        WaitThread(String name) {
+            super(name);
+        }
+
+        @Override
+        public void run() {
+            synchronized (TAG){
+                while (isRunning) {
+                    if(isFirst&&count<70){
+                        isFirst = false;
+                        try {
+                            printMessage("WaitThread开始等待,释放锁\n");
+                            TAG.wait();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        printMessage("WaitThread等待结束，获得锁\n");
+                    }
+                    count();
+                }
+            }
+        }
     }
 
     private void test1() {
